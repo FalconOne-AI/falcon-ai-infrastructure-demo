@@ -226,11 +226,9 @@ class ConvAutoencoder(nn.Module):
             nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1),      # 0
             nn.ReLU(),                                                  # 1
             nn.BatchNorm2d(32),                                         # 2
-            
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),     # 3
             nn.ReLU(),                                                  # 4
             nn.BatchNorm2d(64),                                         # 5
-            
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),    # 6
             nn.ReLU(),                                                  # 7
             nn.BatchNorm2d(128),                                        # 8
@@ -241,11 +239,9 @@ class ConvAutoencoder(nn.Module):
             nn.ConvTranspose2d(128, 64, kernel_size=3, stride=2, padding=1, output_padding=1),  # 0
             nn.ReLU(),                                                                           # 1
             nn.BatchNorm2d(64),                                                                  # 2
-            
             nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=1, output_padding=1),   # 3
             nn.ReLU(),                                                                           # 4
             nn.BatchNorm2d(32),                                                                  # 5
-            
             nn.ConvTranspose2d(32, 3, kernel_size=3, stride=2, padding=1, output_padding=1),    # 6
             nn.Sigmoid(),                                                                        # 7
         )
