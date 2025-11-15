@@ -372,7 +372,8 @@ def main():
     # Header
     st.markdown("""
     <div class="header-container">
-        <div class="header-title">🦅 Falcon AI Solutions</div>
+        <img src="https://www.falconaisolutions.com/lovable-uploads/f28589dc-87f2-42d0-9d82-a577d7ce34ab.png" 
+     alt="Falcon AI Logo" style="height: 2.8rem; vertical-align: middle; margin-right: 1rem;">
         <div class="header-subtitle">Infrastructure Anomaly Detection | Dual Model Demo</div>
         <div class="header-tagline">Transforming Business With AI</div>
     </div>
