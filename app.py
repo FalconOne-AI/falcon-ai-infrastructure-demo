@@ -468,11 +468,11 @@ def main():
         threshold = st.slider(
             "Anomaly Threshold",
             min_value=0.00000,
-            max_value=0.00050,  # Adjusted based on actual score range (0.0001-0.0003)
-            value=0.00010,       # Default: sensitive but not too aggressive
-            step=0.00001,        # Fine-grained control
-            format="%.5f",       # Show 5 decimal places for precision
-            help="Lower threshold = more sensitive detection. Scores typically range 0.0001-0.0003 for defects."
+            max_value=0.00050,
+            value=0.00015,      # Set between normal (0.0001) and defects (0.0002)
+            step=0.00001,
+            format="%.5f",
+            help="Scores: Normal concrete ~0.0001, Defects ~0.0002+. Adjust to balance sensitivity vs false positives."
         )
         st.session_state.threshold = threshold
         
@@ -692,3 +692,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
