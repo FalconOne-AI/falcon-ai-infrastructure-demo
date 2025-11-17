@@ -336,10 +336,16 @@ def create_overlay(original: Image.Image, anomaly_map: np.ndarray, alpha: float 
     anomaly_pil = Image.fromarray(anomaly_map).resize(original.size, Image.Resampling.BILINEAR)
     return Image.blend(original, anomaly_pil, alpha=alpha)
 
-def get_severity_level(score: float) -> Tuple[str, str]:
-    if score < 0.3:
+def get_severity_level(score: float, threshold: float) -> Tuple[str, str]:
+    """
+    Determine severity based on dynamic threshold.
+    - Below threshold: NORMAL
+    - 1-2x threshold: MINOR ANOMALY
+    - Above 2x threshold: CRITICAL ANOMALY
+    """
+    if score < threshold:
         return "NORMAL", "status-normal"
-    elif score < 0.6:
+    elif score < threshold * 2:
         return "MINOR ANOMALY", "status-warning"
     else:
         return "CRITICAL ANOMALY", "status-danger"
@@ -581,7 +587,7 @@ def main():
                     st.subheader(f"Image {idx + 1}: {result.get('filename', 'Unknown')}")
                 
                 score = result['score']
-                severity, severity_class = get_severity_level(score)
+                severity, severity_class = get_severity_level(score, threshold)
                 
                 st.markdown(f"""
                 <div class="metric-card">
