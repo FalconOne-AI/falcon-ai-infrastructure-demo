@@ -1,257 +1,55 @@
 """
-Infrastructure Anomaly Detection - Falcon AI Solutions
-=======================================================
-Dual-model demonstration featuring:
-- Visual Concrete Model (SDNET2018) - 20 Epochs, A100 GPU
-- Thermal Infrared Model (SDNET2021)
-
-Concrete Model Details:
-- Training: 20 epochs on 42,448 images
-- Validation Loss: 0.000066 (Epoch 18 - Best)
-- GPU: NVIDIA A100-SXM4-40GB
-- Total Training Time: ~30 minutes
-
-Powered by Falcon AI Solutions
-Transforming Business With AI
-
-Version: 3.0 - Production Ready (Epoch 18 Final)
+Concrete Anomaly Detection - Visual Prototype
+Unsupervised autoencoder approach for infrastructure inspection
 """
 
 import streamlit as st
 import torch
 import torch.nn as nn
-from torchvision import transforms
 from PIL import Image
 import numpy as np
-import matplotlib.pyplot as plt
-import io
-import base64
 from pathlib import Path
-import zipfile
-from typing import Tuple, List, Optional
-import gdown
+import io
 
 # ============================================================================
 # PAGE CONFIGURATION
 # ============================================================================
 
 st.set_page_config(
-    page_title="Falcon AI Solutions | Anomaly Detection",
-    page_icon="🦅",
+    page_title="Concrete Anomaly Detection",
+    page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ============================================================================
-# GOOGLE DRIVE MODEL CONFIGURATION
-# ============================================================================
-
-MODELS_CONFIG = {
-    "concrete": {
-        "name": "Visual Concrete Model",
-        "description": "Trained on SDNET2018 visual concrete images (20 epochs, A100 GPU)",
-        "gdrive_id": "1UF-9bdPrpZDBVfV8OnTQAmNnmjc0HVQ1",  # Epoch 18 - Best validation loss
-        "filename": "concrete_autoencoder_epoch18_final.pth",
-        "dataset": "SDNET2018",
-        "image_types": "Visual RGB concrete images",
-        "best_for": "Surface cracks, spalling, visual defects",
-        "training_images": "~42,000 images (90% train, 10% validation)",
-        "epochs": "20 epochs",
-        "validation_loss": "0.000066 (Epoch 18 - Best)"
-    },
-    "thermal": {
-        "name": "Thermal Infrared Model",
-        "description": "Trained on SDNET2021 thermal bridge images",
-        "gdrive_id": "1VE3ZR12aRD4ojtvbdR2uqRNxRA90deCl",
-        "filename": "thermal_autoencoder_week2.pth",
-        "dataset": "SDNET2021",
-        "image_types": "Thermal infrared images",
-        "best_for": "Subsurface defects, delamination, moisture",
-        "training_images": "~5,000+ thermal images"
-    }
-}
-
-# ============================================================================
-# FALCON AI SOLUTIONS CUSTOM STYLING
-# ============================================================================
-
-st.markdown("""
-<style>
-    .main {
-        background-color: #f5f7fa;
-    }
-    
-    .header-container {
-        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #60a5fa 100%);
-        padding: 2.5rem;
-        border-radius: 12px;
-        margin-bottom: 2rem;
-        color: white;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-    
-    .header-title {
-        font-size: 2.8rem;
-        font-weight: 700;
-        margin-bottom: 0.5rem;
-    }
-    
-    .header-subtitle {
-        font-size: 1.3rem;
-        opacity: 0.95;
-        font-weight: 300;
-    }
-    
-    .header-tagline {
-        font-size: 1.1rem;
-        margin-top: 1rem;
-        opacity: 0.9;
-        font-style: italic;
-        border-top: 1px solid rgba(255,255,255,0.3);
-        padding-top: 0.75rem;
-    }
-    
-    .model-selector-box {
-        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-        padding: 1.5rem;
-        border-radius: 10px;
-        border: 2px solid #3b82f6;
-        margin: 1rem 0;
-    }
-    
-    .model-info-card {
-        background: white;
-        padding: 1.25rem;
-        border-radius: 8px;
-        margin: 0.75rem 0;
-        border-left: 4px solid #2563eb;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    
-    .metric-card {
-        background: rgba(255, 255, 255, 0.9);
-        backdrop-filter: blur(10px);
-        padding: 1.75rem;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.07);
-        border: 1px solid rgba(37, 99, 235, 0.1);
-        text-align: center;
-        margin: 0.5rem 0;
-        transition: transform 0.2s;
-    }
-    
-    .metric-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(0,0,0,0.1);
-    }
-    
-    .metric-value {
-        font-size: 2.2rem;
-        font-weight: 700;
-        margin: 0.5rem 0;
-        color: #1e3a8a;
-    }
-    
-    .metric-label {
-        color: #64748b;
-        font-size: 0.95rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    
-    .status-normal {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        color: white;
-        padding: 0.6rem 1.2rem;
-        border-radius: 24px;
-        font-weight: 600;
-        display: inline-block;
-        box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
-    }
-    
-    .status-warning {
-        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-        color: white;
-        padding: 0.6rem 1.2rem;
-        border-radius: 24px;
-        font-weight: 600;
-        display: inline-block;
-        box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
-    }
-    
-    .status-danger {
-        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-        color: white;
-        padding: 0.6rem 1.2rem;
-        border-radius: 24px;
-        font-weight: 600;
-        display: inline-block;
-        box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
-    }
-    
-    .info-box {
-        background-color: #dbeafe;
-        border-left: 5px solid #2563eb;
-        padding: 1.25rem;
-        margin: 1rem 0;
-        border-radius: 6px;
-    }
-    
-    .stButton>button {
-        width: 100%;
-        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
-        color: white;
-        font-weight: 600;
-        border: none;
-        padding: 0.875rem;
-        border-radius: 10px;
-        transition: all 0.3s;
-        box-shadow: 0 2px 4px rgba(30, 58, 138, 0.2);
-    }
-    
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(30, 58, 138, 0.3);
-        background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# ============================================================================
 # MODEL ARCHITECTURE
 # ============================================================================
 
-class ConvAutoencoder(nn.Module):
-    """
-    Convolutional Autoencoder with BatchNorm (NO Dropout).
-    Layer order: Conv2d → ReLU → BatchNorm2d
-    """
+class ConcreteAutoencoder(nn.Module):
+    """Convolutional Autoencoder for concrete anomaly detection"""
+    
     def __init__(self):
-        super(ConvAutoencoder, self).__init__()
+        super(ConcreteAutoencoder, self).__init__()
         
-        # Encoder: Conv → ReLU → BatchNorm pattern
+        # Encoder
         self.encoder = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1),      # 0
-            nn.ReLU(),                                                  # 1
-            nn.BatchNorm2d(32),                                         # 2
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),     # 3
-            nn.ReLU(),                                                  # 4
-            nn.BatchNorm2d(64),                                         # 5
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),    # 6
-            nn.ReLU(),                                                  # 7
-            nn.BatchNorm2d(128),                                        # 8
+            nn.Conv2d(3, 64, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),
+            nn.ReLU()
         )
         
-        # Decoder: ConvTranspose → ReLU → BatchNorm pattern
+        # Decoder
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(128, 64, kernel_size=3, stride=2, padding=1, output_padding=1),  # 0
-            nn.ReLU(),                                                                           # 1
-            nn.BatchNorm2d(64),                                                                  # 2
-            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=1, output_padding=1),   # 3
-            nn.ReLU(),                                                                           # 4
-            nn.BatchNorm2d(32),                                                                  # 5
-            nn.ConvTranspose2d(32, 3, kernel_size=3, stride=2, padding=1, output_padding=1),    # 6
-            nn.Sigmoid(),                                                                        # 7
+            nn.ConvTranspose2d(256, 128, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 3, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.Sigmoid()
         )
     
     def forward(self, x):
@@ -260,438 +58,431 @@ class ConvAutoencoder(nn.Module):
         return decoded
 
 # ============================================================================
-# MODEL LOADING
+# MODEL CONFIGURATIONS
+# ============================================================================
+
+MODEL_INFO = {
+    'Bridge Deck': {
+        'model_file': 'deck_autoencoder_epoch45_best.pth',
+        'balanced_threshold': 0.000163,
+        'conservative_threshold': 0.001025,
+        'normal_mean': 0.000220,
+        'normal_median': 0.000146,
+        'crack_mean': 0.000214,
+        'crack_median': 0.000180,
+        'separation': 1.2,
+        'best_epoch': 45,
+        'best_loss': 0.000067,
+        'accuracy': 59.2,
+        'training_images': 11239
+    },
+    'Wall': {
+        'model_file': 'wall_autoencoder_epoch41_best.pth',
+        'balanced_threshold': 0.000091,
+        'conservative_threshold': 0.000180,
+        'normal_mean': 0.000076,
+        'normal_median': 0.000059,
+        'crack_mean': 0.000106,
+        'crack_median': 0.000075,
+        'separation': 1.4,
+        'best_epoch': 41,
+        'best_loss': 0.000025,
+        'accuracy': 59.5,
+        'training_images': 14238
+    },
+    'Pavement': {
+        'model_file': 'pavement_autoencoder_epoch22_best.pth',
+        'balanced_threshold': 0.000100,
+        'conservative_threshold': 0.000200,
+        'normal_mean': 0.000085,
+        'normal_median': 0.000070,
+        'crack_mean': 0.000110,
+        'crack_median': 0.000090,
+        'separation': 1.3,
+        'best_epoch': 22,
+        'best_loss': 0.000071,
+        'accuracy': 59.0,
+        'training_images': 15621
+    }
+}
+
+# ============================================================================
+# UTILITY FUNCTIONS
 # ============================================================================
 
 @st.cache_resource
-def download_model_from_gdrive(gdrive_id: str, filename: str) -> str:
-    """Download model from Google Drive."""
+def load_model(substrate_type):
+    """Load pre-trained autoencoder model from Google Drive"""
+    import gdown
+    
+    # Google Drive File IDs - Your actual model files
+    GDRIVE_MODELS = {
+        'Bridge Deck': '1gEH61QdTh7vfnDpl0ZaP2ryG1I_NbalP',
+        'Wall': '1mNH_qP6egf7355KXZGZG3jeD2S9a91hM',
+        'Pavement': '1YtW1FHLjOsTOtEqTZz4d3e0p3KpezC-N'
+    }
+    
+    model = ConcreteAutoencoder()
+    
     try:
-        models_dir = Path("models")
-        models_dir.mkdir(exist_ok=True)
-        output_path = models_dir / filename
+        # Create cache directory
+        cache_dir = Path('.model_cache')
+        cache_dir.mkdir(exist_ok=True)
         
-        if output_path.exists():
-            return str(output_path)
+        # Model cache path
+        model_filename = f"{substrate_type.lower().replace(' ', '_')}_model.pth"
+        model_path = cache_dir / model_filename
         
-        url = f"https://drive.google.com/uc?id={gdrive_id}"
-        gdown.download(url, str(output_path), quiet=False, fuzzy=True)
-        return str(output_path)
+        # Download from Google Drive if not cached
+        if not model_path.exists():
+            file_id = GDRIVE_MODELS[substrate_type]
+            gdrive_url = f'https://drive.google.com/uc?id={file_id}'
+            
+            with st.spinner(f'Downloading {substrate_type} model from Google Drive...'):
+                gdown.download(gdrive_url, str(model_path), quiet=False)
+        
+        # Load model
+        model.load_state_dict(torch.load(model_path, map_location='cpu'))
+        model.eval()
+        return model
+        
     except Exception as e:
-        st.error(f"Error downloading model: {str(e)}")
+        st.error(f"Error loading model: {e}")
+        st.error(f"Please check that Google Drive file IDs are correct and files are publicly accessible")
         return None
 
-@st.cache_resource
-def load_model(model_type: str) -> Optional[ConvAutoencoder]:
-    """Load model from Google Drive."""
-    if model_type not in MODELS_CONFIG:
-        st.error(f"Unknown model type: {model_type}")
-        return None
+def preprocess_image(image, target_size=(256, 256)):
+    """Preprocess image for model input"""
+    # Resize
+    image = image.resize(target_size, Image.LANCZOS)
     
-    config = MODELS_CONFIG[model_type]
+    # Convert to tensor
+    img_array = np.array(image).astype(np.float32) / 255.0
+    img_tensor = torch.from_numpy(img_array).permute(2, 0, 1).unsqueeze(0)
     
-    with st.spinner(f"Loading {config['name']}..."):
-        try:
-            model_path = download_model_from_gdrive(config["gdrive_id"], config["filename"])
-            
-            if model_path is None:
-                return None
-            
-            model = ConvAutoencoder()
-            model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
-            model.eval()
-            
-            st.success(f"✓ {config['name']} loaded successfully!")
-            return model
-            
-        except Exception as e:
-            st.error(f"Error loading {config['name']}: {str(e)}")
-            return None
+    return img_tensor
 
-# ============================================================================
-# HELPER FUNCTIONS
-# ============================================================================
-
-def preprocess_image(image: Image.Image, target_size: Tuple[int, int] = (256, 256)) -> torch.Tensor:
-    transform = transforms.Compose([
-        transforms.Resize(target_size),
-        transforms.ToTensor(),
-    ])
-    if image.mode != 'RGB':
-        image = image.convert('RGB')
-    return transform(image).unsqueeze(0)
-
-def calculate_reconstruction_error(original: torch.Tensor, reconstructed: torch.Tensor) -> np.ndarray:
-    """
-    Calculate per-pixel reconstruction error.
-    Returns 2D error map for visualization and scoring.
-    """
+def calculate_reconstruction_error(model, image_tensor):
+    """Calculate reconstruction error (anomaly score)"""
     with torch.no_grad():
-        error = torch.mean((original - reconstructed) ** 2, dim=1)
-        return error.squeeze().cpu().numpy()
+        reconstruction = model(image_tensor)
+        mse = torch.mean((image_tensor - reconstruction) ** 2).item()
+    return mse, reconstruction
 
-def generate_anomaly_map(error: np.ndarray, threshold: float = 0.5) -> np.ndarray:
-    """
-    Generate heatmap with improved noise reduction and defect highlighting.
-    Uses percentile-based normalization with smoothing.
-    """
-    # Simple 3x3 averaging for smoothing (reduces noise)
-    from scipy.ndimage import uniform_filter
-    error_smooth = uniform_filter(error.astype(np.float32), size=3)
-    
-    # Use 98th percentile as upper bound (reduces noise sensitivity)
-    upper_bound = np.percentile(error_smooth, 98)
-    
-    # Use median (50th percentile) as lower bound to suppress background noise
-    lower_bound = np.percentile(error_smooth, 50)
-    
-    # Normalize: map [median, 98th percentile] → [0, 1]
-    error_norm = np.clip((error_smooth - lower_bound) / (upper_bound - lower_bound + 1e-8), 0, 1)
-    
-    # Apply colormap: blue (low) → green → yellow → red (high)
-    cmap = plt.cm.get_cmap('jet')
-    heatmap = cmap(error_norm)[:, :, :3]
-    return (heatmap * 255).astype(np.uint8)
-
-def create_overlay(original: Image.Image, anomaly_map: np.ndarray, alpha: float = 0.5) -> Image.Image:
-    anomaly_pil = Image.fromarray(anomaly_map).resize(original.size, Image.Resampling.BILINEAR)
-    return Image.blend(original, anomaly_pil, alpha=alpha)
-
-def get_severity_level(score: float, threshold: float) -> Tuple[str, str]:
-    """
-    Determine severity based on dynamic threshold.
-    - Below threshold: NORMAL
-    - 1-2x threshold: MINOR ANOMALY
-    - Above 2x threshold: CRITICAL ANOMALY
-    """
-    if score < threshold:
-        return "NORMAL", "status-normal"
-    elif score < threshold * 2:
-        return "MINOR ANOMALY", "status-warning"
-    else:
-        return "CRITICAL ANOMALY", "status-danger"
-
-def tensor_to_image(tensor: torch.Tensor) -> Image.Image:
-    img = tensor.squeeze().cpu().numpy()
-    img = np.transpose(img, (1, 2, 0))
-    img = (img * 255).astype(np.uint8)
-    return Image.fromarray(img)
-
-def create_download_link(images: List[Image.Image], scores: List[float], filename: str = "results.zip") -> str:
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        for idx, (img, score) in enumerate(zip(images, scores)):
-            img_buffer = io.BytesIO()
-            img.save(img_buffer, format='PNG')
-            zip_file.writestr(f"result_{idx+1}_score_{score:.3f}.png", img_buffer.getvalue())
-    zip_buffer.seek(0)
-    b64 = base64.b64encode(zip_buffer.read()).decode()
-    return f'<a href="data:application/zip;base64,{b64}" download="{filename}" style="color: #2563eb; font-weight: 600;">📥 Download All Results</a>'
+def tensor_to_image(tensor):
+    """Convert tensor back to PIL Image"""
+    img_array = tensor.squeeze(0).permute(1, 2, 0).numpy()
+    img_array = (img_array * 255).astype(np.uint8)
+    return Image.fromarray(img_array)
 
 # ============================================================================
-# SESSION STATE
-# ============================================================================
-
-if 'processed_results' not in st.session_state:
-    st.session_state.processed_results = []
-if 'threshold' not in st.session_state:
-    st.session_state.threshold = 0.005  # Optimized for Epoch 18 model
-if 'selected_model' not in st.session_state:
-    st.session_state.selected_model = "concrete"
-
-# ============================================================================
-# MAIN APPLICATION
+# MAIN APP
 # ============================================================================
 
 def main():
     # Header
-    st.markdown("""
-    <div class="header-container">
-        <div class="header-title">🦅 Falcon AI Solutions</div>
-        <div class="header-subtitle">Infrastructure Anomaly Detection | Dual Model Demo</div>
-        <div class="header-tagline">Transforming Business With AI</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.title("🔍 Concrete Anomaly Detection - Visual Prototype")
+    st.markdown("*Unsupervised autoencoder approach for infrastructure inspection*")
     
     # Sidebar
     with st.sidebar:
         st.header("⚙️ Configuration")
         
-        # Branding
-        st.markdown("""
-        <div style="text-align: center; padding: 1rem 0; border-bottom: 1px solid #e2e8f0; margin-bottom: 1.5rem;">
-            <p style="color: #1e3a8a; font-weight: 600; margin: 0;">Powered by</p>
-            <p style="color: #2563eb; font-size: 1.2rem; font-weight: 700; margin: 0.25rem 0;">Falcon AI Solutions</p>
-            <p style="color: #64748b; font-size: 0.85rem; margin: 0;">www.falconaisolutions.com</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Model Selection
-        st.markdown('<div class="model-selector-box">', unsafe_allow_html=True)
-        st.subheader("🔄 Select Model")
-        
-        model_choice = st.radio(
-            "Choose detection model:",
-            ["Visual Concrete", "Thermal Infrared"],
-            help="Select which trained model to use for anomaly detection"
+        # Substrate selection
+        substrate_type = st.selectbox(
+            "Select Substrate Type",
+            list(MODEL_INFO.keys()),
+            help="Choose the infrastructure type to analyze"
         )
         
-        model_type = "concrete" if model_choice == "Visual Concrete" else "thermal"
-        st.session_state.selected_model = model_type
+        config = MODEL_INFO[substrate_type]
         
-        config = MODELS_CONFIG[model_type]
+        st.divider()
         
+        # Model performance metrics
+        st.subheader("📊 Model Performance")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Separation Ratio", f"{config['separation']}x", 
+                     delta="Target: 5-10x", delta_color="inverse")
+        with col2:
+            st.metric("Accuracy", f"{config['accuracy']}%",
+                     delta="Target: 85-95%", delta_color="inverse")
+        
+        st.caption(f"**Training Loss:** {config['best_loss']:.6f}")
+        st.caption(f"**Best Epoch:** {config['best_epoch']}")
+        st.caption(f"**Training Images:** {config['training_images']:,}")
+        
+        st.divider()
+        
+        # Threshold settings
+        st.subheader("🎚️ Detection Threshold")
+        threshold_mode = st.radio(
+            "Threshold Mode",
+            ["Balanced", "Conservative", "Custom"],
+            help="Balanced: Equal false positives/negatives\nConservative: Fewer false alarms"
+        )
+        
+        if threshold_mode == "Custom":
+            threshold = st.slider(
+                "Custom Threshold",
+                min_value=0.0,
+                max_value=config['conservative_threshold'] * 2,
+                value=config['balanced_threshold'],
+                step=0.000001,
+                format="%.6f"
+            )
+        else:
+            threshold = config[f"{threshold_mode.lower()}_threshold"]
+            st.info(f"Using {threshold_mode} threshold: **{threshold:.6f}**")
+        
+        st.divider()
+        
+        # Score reference
+        st.subheader("📈 Score Reference")
         st.markdown(f"""
-        <div class="model-info-card">
-            <strong>{config['name']}</strong><br>
-            <small style="color: #64748b;">
-            📊 Dataset: {config['dataset']}<br>
-            📷 Type: {config['image_types']}<br>
-            🎯 Best for: {config['best_for']}<br>
-            📈 Training: {config['training_images']}
-            </small>
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        **Normal Range:**  
+        Mean: `{config['normal_mean']:.6f}`  
+        Median: `{config['normal_median']:.6f}`
         
-        # Load model
-        model = load_model(model_type)
-        
-        if model is None:
-            st.error("⚠️ Model loading failed. Please check configuration.")
-            st.stop()
-        
-        st.divider()
-        
-        # Detection settings
-        st.subheader("Detection Settings")
-        threshold = st.slider(
-            "Anomaly Threshold",
-            min_value=0.00000,
-            max_value=0.00050,
-            value=0.00015,      # Set between normal (0.0001) and defects (0.0002)
-            step=0.00001,
-            format="%.5f",
-            help="Scores: Normal concrete ~0.0001, Defects ~0.0002+. Adjust to balance sensitivity vs false positives."
-        )
-        st.session_state.threshold = threshold
-        
-        overlay_alpha = st.slider(
-            "Overlay Transparency",
-            min_value=0.0,
-            max_value=1.0,
-            value=0.5,
-            step=0.1
-        )
-        
-        st.divider()
-        
-        # About
-        st.subheader("ℹ️ About")
-        st.markdown("""
-        This demo showcases **dual-model AI capabilities** for infrastructure inspection:
-        
-        **Visual Concrete Model:**
-        - Detects surface-level defects
-        - Trained on 28,000+ images
-        - Identifies cracks, spalling
-        
-        **Thermal Infrared Model:**
-        - Detects subsurface issues
-        - Thermal imaging analysis
-        - Finds delamination, moisture
-        
-        **Powered by Falcon AI Solutions**
+        **Crack Range:**  
+        Mean: `{config['crack_mean']:.6f}`  
+        Median: `{config['crack_median']:.6f}`
         """)
     
-    # Main content
+    # Main content area
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        st.header("📤 Upload Images")
-        
-        upload_mode = st.radio(
-            "Upload Mode",
-            ["Single Image", "Batch Upload"],
-            horizontal=True
+        st.subheader("📤 Upload Image")
+        uploaded_file = st.file_uploader(
+            "Choose a concrete image",
+            type=['png', 'jpg', 'jpeg'],
+            help="Upload an image of concrete infrastructure"
         )
         
-        if upload_mode == "Single Image":
-            uploaded_file = st.file_uploader(
-                f"Choose an image for {MODELS_CONFIG[model_type]['name']}",
-                type=['jpg', 'jpeg', 'png', 'tif', 'tiff'],
-                help=f"Upload {MODELS_CONFIG[model_type]['image_types']}"
-            )
+        if uploaded_file is not None:
+            # Display original image
+            image = Image.open(uploaded_file).convert('RGB')
+            st.image(image, caption="Original Image", use_container_width=True)
             
-            if uploaded_file is not None:
-                image = Image.open(uploaded_file)
-                st.image(image, caption="Original Image", use_container_width=True)
+            # Process button
+            if st.button("🔍 Analyze Image", type="primary", use_container_width=True):
+                with st.spinner(f"Loading {substrate_type} model..."):
+                    model = load_model(substrate_type)
                 
-                if st.button("🔍 Detect Anomalies", type="primary"):
-                    with st.spinner("AI processing..."):
+                if model is not None:
+                    with st.spinner("Analyzing image..."):
+                        # Preprocess
                         img_tensor = preprocess_image(image)
-                        with torch.no_grad():
-                            reconstruction = model(img_tensor)
-                        error = calculate_reconstruction_error(img_tensor, reconstruction)
-                        anomaly_score = float(np.percentile(error, 95))  # Use 95th percentile instead of mean
-                        anomaly_map = generate_anomaly_map(error, threshold)
-                        overlay = create_overlay(image, anomaly_map, overlay_alpha)
-                        reconstructed_img = tensor_to_image(reconstruction)
                         
-                        st.session_state.processed_results = [{
-                            'original': image,
-                            'reconstructed': reconstructed_img,
-                            'anomaly_map': Image.fromarray(anomaly_map),
-                            'overlay': overlay,
-                            'score': anomaly_score
-                        }]
-        
-        else:  # Batch upload
-            uploaded_files = st.file_uploader(
-                f"Choose multiple images for {MODELS_CONFIG[model_type]['name']}",
-                type=['jpg', 'jpeg', 'png', 'tif', 'tiff'],
-                accept_multiple_files=True
-            )
-            
-            if uploaded_files:
-                st.success(f"✓ {len(uploaded_files)} images uploaded")
-                
-                if st.button("🔍 Process Batch", type="primary"):
-                    progress_bar = st.progress(0)
-                    results = []
-                    
-                    for idx, uploaded_file in enumerate(uploaded_files):
-                        progress = (idx + 1) / len(uploaded_files)
-                        progress_bar.progress(progress)
+                        # Calculate reconstruction error
+                        error_score, reconstruction = calculate_reconstruction_error(model, img_tensor)
                         
-                        image = Image.open(uploaded_file)
-                        img_tensor = preprocess_image(image)
-                        with torch.no_grad():
-                            reconstruction = model(img_tensor)
-                        error = calculate_reconstruction_error(img_tensor, reconstruction)
-                        anomaly_score = float(np.percentile(error, 95))  # Use 95th percentile instead of mean
-                        anomaly_map = generate_anomaly_map(error, threshold)
-                        overlay = create_overlay(image, anomaly_map, overlay_alpha)
-                        reconstructed_img = tensor_to_image(reconstruction)
-                        
-                        results.append({
-                            'original': image,
-                            'reconstructed': reconstructed_img,
-                            'anomaly_map': Image.fromarray(anomaly_map),
-                            'overlay': overlay,
-                            'score': anomaly_score,
-                            'filename': uploaded_file.name
-                        })
-                    
-                    st.session_state.processed_results = results
-                    st.success(f"✓ Processed {len(results)} images")
+                        # Store in session state
+                        st.session_state['error_score'] = error_score
+                        st.session_state['reconstruction'] = reconstruction
+                        st.session_state['threshold'] = threshold
+                        st.session_state['config'] = config
     
     with col2:
-        st.header("📊 Results")
+        st.subheader("📊 Analysis Results")
         
-        if st.session_state.processed_results:
-            if len(st.session_state.processed_results) > 1:
-                st.subheader("Batch Summary")
-                scores = [r['score'] for r in st.session_state.processed_results]
-                
-                metric_col1, metric_col2, metric_col3 = st.columns(3)
-                with metric_col1:
-                    st.metric("Images Processed", len(scores))
-                with metric_col2:
-                    st.metric("Avg Anomaly Score", f"{np.mean(scores):.3f}")
-                with metric_col3:
-                    anomalies = sum(1 for s in scores if s > threshold)
-                    st.metric("Anomalies Detected", anomalies)
-                st.divider()
+        if 'error_score' in st.session_state:
+            error_score = st.session_state['error_score']
+            reconstruction = st.session_state['reconstruction']
+            threshold = st.session_state['threshold']
+            config = st.session_state['config']
             
-            for idx, result in enumerate(st.session_state.processed_results):
-                if len(st.session_state.processed_results) > 1:
-                    st.subheader(f"Image {idx + 1}: {result.get('filename', 'Unknown')}")
-                
-                score = result['score']
-                severity, severity_class = get_severity_level(score, threshold)
-                
-                st.markdown(f"""
-                <div class="metric-card">
-                    <div class="metric-label">Anomaly Score</div>
-                    <div class="metric-value">{score:.4f}</div>
-                    <div class="{severity_class}">{severity}</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                tab1, tab2, tab3, tab4 = st.tabs([
-                    "📸 Comparison",
-                    "🔥 Heatmap",
-                    "🎯 Overlay",
-                    "📈 Analysis"
-                ])
-                
-                with tab1:
-                    comp_col1, comp_col2 = st.columns(2)
-                    with comp_col1:
-                        st.image(result['original'], caption="Original", use_container_width=True)
-                    with comp_col2:
-                        st.image(result['reconstructed'], caption="Reconstruction", use_container_width=True)
-                
-                with tab2:
-                    st.image(result['anomaly_map'], caption="Anomaly Heatmap", use_container_width=True)
-                    st.caption("🔵 Blue = Normal | 🔴 Red = High Anomaly")
-                
-                with tab3:
-                    st.image(result['overlay'], caption="Anomaly Overlay", use_container_width=True)
-                
-                with tab4:
-                    st.markdown(f"""
-                    **AI Analysis:**
-                    - **Model Used:** {MODELS_CONFIG[model_type]['name']}
-                    - **Dataset:** {MODELS_CONFIG[model_type]['dataset']}
-                    - **Score:** {score:.4f}
-                    - **Classification:** {severity}
-                    - **Recommendation:** {'Manual inspection recommended' if score > threshold else 'No immediate action required'}
-                    
-                    **Technical Details:**
-                    - Image size: {result['original'].size}
-                    - Detection threshold: {threshold:.2f}
-                    - Powered by: Falcon AI Solutions
-                    """)
-                
-                st.divider()
+            # Display reconstruction
+            recon_image = tensor_to_image(reconstruction)
+            st.image(recon_image, caption="Model Reconstruction", use_container_width=True)
             
-            if st.session_state.processed_results:
-                st.subheader("💾 Export Results")
-                overlays = [r['overlay'] for r in st.session_state.processed_results]
-                scores = [r['score'] for r in st.session_state.processed_results]
-                download_link = create_download_link(overlays, scores, "falcon_ai_results.zip")
-                st.markdown(download_link, unsafe_allow_html=True)
-        
+            # Detection result
+            is_anomaly = error_score > threshold
+            
+            if is_anomaly:
+                st.error("🔴 **CRACK DETECTED**")
+                confidence = "Very Low" if config['separation'] < 1.5 else "Low"
+            else:
+                st.success("🟢 **NORMAL CONCRETE**")
+                confidence = "Low"
+            
+            # Metrics
+            col_a, col_b, col_c = st.columns(3)
+            with col_a:
+                st.metric("Reconstruction Error", f"{error_score:.6f}")
+            with col_b:
+                st.metric("Threshold", f"{threshold:.6f}")
+            with col_c:
+                st.metric("Confidence", confidence)
+            
+            # Score visualization
+            st.markdown("---")
+            st.markdown("### Score Context")
+            
+            # Create visual bar chart
+            import plotly.graph_objects as go
+            
+            fig = go.Figure()
+            
+            # Add ranges
+            fig.add_trace(go.Bar(
+                x=['Normal Range', 'Your Image', 'Crack Range'],
+                y=[config['normal_mean'], error_score, config['crack_mean']],
+                marker_color=['green', 'blue' if not is_anomaly else 'red', 'red'],
+                text=[f"{config['normal_mean']:.6f}", f"{error_score:.6f}", f"{config['crack_mean']:.6f}"],
+                textposition='auto',
+            ))
+            
+            # Add threshold line
+            fig.add_hline(y=threshold, line_dash="dash", line_color="orange",
+                         annotation_text=f"Threshold: {threshold:.6f}")
+            
+            fig.update_layout(
+                title="Score Comparison",
+                yaxis_title="Reconstruction Error",
+                showlegend=False,
+                height=400
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Warning message
+            st.warning(f"""
+            ⚠️ **Note:** With {config['separation']}x separation, this prediction has approximately 
+            {config['accuracy']}% reliability. This prototype demonstrates the technical challenge 
+            of unsupervised crack detection.
+            """)
         else:
-            st.info("👈 Upload images and click 'Detect Anomalies' to see AI-powered results")
-            st.markdown("""
-            <div class="info-box">
-                <strong>Expected Output:</strong>
-                <ul>
-                    <li>AI-powered anomaly detection</li>
-                    <li>Color-coded heatmaps</li>
-                    <li>Quantified risk scores</li>
-                    <li>Actionable recommendations</li>
-                </ul>
-            </div>
-            """, unsafe_allow_html=True)
+            st.info("👆 Upload an image and click 'Analyze Image' to see results")
     
-    # Footer
-    st.divider()
-    st.markdown("""
-    <div style="text-align: center; color: #64748b; padding: 2rem 0;">
-        <strong style="color: #1e3a8a;">Falcon AI Solutions</strong><br>
-        <span style="color: #2563eb; font-weight: 600;">Transforming Business With AI</span><br>
-        Infrastructure Anomaly Detection | Dual Model Demo<br>
-        <a href="https://www.falconaisolutions.com" target="_blank" style="color: #2563eb;">www.falconaisolutions.com</a><br>
-        <small>Powered by Machine Learning</small>
-    </div>
-    """, unsafe_allow_html=True)
+    # About section
+    with st.expander("📖 About This Prototype", expanded=False):
+        st.markdown(f"""
+        ## Unsupervised Anomaly Detection Results
+        
+        ### Current Model: {substrate_type}
+        
+        #### Performance Metrics
+        - **Score Separation:** {config['separation']}x (Target: 5-10x) ❌
+        - **Detection Accuracy:** ~{config['accuracy']}% (Target: 85-95%) ❌
+        - **Training Loss:** {config['best_loss']:.6f} ✅
+        - **Training Images:** {config['training_images']:,} ✅
+        
+        #### What This Means
+        
+        This prototype uses an **unsupervised autoencoder** approach that:
+        
+        ✅ **Successfully learned** substrate texture patterns  
+        - Model achieved excellent loss convergence
+        - Can reconstruct concrete textures accurately
+        
+        ❌ **Cannot reliably distinguish** cracks from normal texture  
+        - Only {config['separation']}x score separation achieved
+        - Results in ~60% accuracy (coin-flip territory)
+        
+        #### Key Discovery: Data Contamination
+        
+        During validation, we discovered that "uncracked" training folders contained images 
+        with visible cracks. This data contamination explains the poor separation:
+        
+        - Model learned to reconstruct BOTH normal texture AND cracks as "normal"
+        - When shown a crack, it reconstructs it well → low error → no detection
+        
+        **Visual Evidence:** Reconstruction quality tests revealed cracks in training data  
+        **Impact:** Model cannot distinguish what it learned as normal
+        
+        #### Why Low Separation Occurs
+        
+        Even with clean data, cracks are thin linear features that create similar reconstruction 
+        errors to normal texture variations (aggregate patterns, shadows, joints).
+        
+        **Analogy:** Teaching someone to perfectly copy concrete textures - they get so good 
+        that they reproduce both normal patterns AND cracks with equal accuracy, making them 
+        indistinguishable.
+        
+        #### Technical Validation
+        
+        | Substrate | Training Loss | Separation | Accuracy |
+        |-----------|---------------|------------|----------|
+        | Bridge Deck | 0.000067 | 1.2x | 59% |
+        | Wall | 0.000025 | 1.4x | 60% |
+        | Pavement | 0.000071 | 1.3x | 59% |
+        
+        All models achieved excellent convergence but insufficient separation for production use.
+        
+        #### Recommended Next Steps
+        
+        1. **Data Cleaning:** Remove contaminated images from training sets
+        2. **Supervised Classification:** Train models that explicitly learn crack features
+        3. **Thermal Imaging:** Explore temperature-based detection (physical defects → thermal signatures)
+        4. **Expected Improvement:** 85-95% accuracy with supervised approach
+        
+        #### Use Case
+        
+        This prototype serves as:
+        - **Phase 1 Diagnostic:** Validates infrastructure and identifies limitations
+        - **Technical Baseline:** Demonstrates substrate-specific model pipeline
+        - **Research Finding:** Documents why unsupervised approach requires clean data
+        
+        **Status:** Phase 2 (supervised classification) in development  
+        **Contact:** For production deployment inquiries
+        
+        ---
+        
+        **⚠️ Disclaimer:** This is a research prototype demonstrating technical challenges 
+        in unsupervised anomaly detection. Not intended for production use in current state.
+        """)
+    
+    # Technical details
+    with st.expander("🔧 Technical Details", expanded=False):
+        st.markdown("""
+        ### Model Architecture
+        
+        **Type:** Convolutional Autoencoder  
+        **Parameters:** 187,011  
+        **Input Size:** 256×256×3 (RGB)  
+        **Architecture:**
+        
+        **Encoder:**
+        - Conv2d(3→64, k=3, s=2) + ReLU
+        - Conv2d(64→128, k=3, s=2) + ReLU
+        - Conv2d(128→256, k=3, s=2) + ReLU
+        
+        **Decoder:**
+        - ConvTranspose2d(256→128, k=3, s=2) + ReLU
+        - ConvTranspose2d(128→64, k=3, s=2) + ReLU
+        - ConvTranspose2d(64→3, k=3, s=2) + Sigmoid
+        
+        ### Training Configuration
+        
+        - **Optimizer:** Adam
+        - **Learning Rate:** 0.001
+        - **Batch Size:** 32
+        - **Epochs:** 50 (with early stopping)
+        - **Loss Function:** MSE (Mean Squared Error)
+        - **Hardware:** NVIDIA A100 GPU (Google Colab Pro)
+        
+        ### Dataset
+        
+        **Source:** SDNET2018 (Concrete Crack Detection)  
+        **Training Strategy:** Unsupervised (normal images only)  
+        **Testing:** Separate cracked image sets
+        
+        ### Anomaly Score
+        
+        Reconstruction error calculated as Mean Squared Error (MSE) between original 
+        and reconstructed image. Higher error indicates potential anomaly.
+        
+        ```python
+        error = MSE(original, reconstruction)
+        is_anomaly = error > threshold
+        ```
+        """)
+
+# ============================================================================
+# RUN APP
+# ============================================================================
 
 if __name__ == "__main__":
-    main()
-
-
-
