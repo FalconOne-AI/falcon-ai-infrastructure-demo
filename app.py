@@ -405,6 +405,21 @@ def main():
     # Main content area
     st.markdown("### 📤 Upload Images")
     
+    # Clear All button
+    if 'results' in st.session_state or uploaded_files:
+        if st.button("🗑️ Clear All", type="secondary", help="Remove all uploaded files and clear analysis"):
+            # Clear session state
+            if 'results' in st.session_state:
+                del st.session_state['results']
+            if 'config' in st.session_state:
+                del st.session_state['config']
+            if 'heatmap_colormap' in st.session_state:
+                del st.session_state['heatmap_colormap']
+            if 'overlay_alpha' in st.session_state:
+                del st.session_state['overlay_alpha']
+            st.success("✅ Cleared all files and analysis!")
+            st.rerun()
+    
     # Batch upload with size limit
     st.caption("💡 Upload multiple images (up to 200MB total)")
     uploaded_files = st.file_uploader(
@@ -459,7 +474,6 @@ def main():
                 status_text.text(f"✅ Processed {len(uploaded_files)} images!")
                 st.session_state['results'] = results
                 st.session_state['config'] = config
-                st.session_state['threshold'] = threshold
                 st.session_state['heatmap_colormap'] = heatmap_colormap
                 st.session_state['overlay_alpha'] = overlay_alpha
     
@@ -467,12 +481,16 @@ def main():
     if 'results' in st.session_state:
         results = st.session_state['results']
         config = st.session_state['config']
-        threshold = st.session_state['threshold']
+        
+        # Update threshold in real-time - recalculate anomaly status
+        current_threshold = threshold
+        for result in results:
+            result['is_anomaly'] = result['error_score'] > current_threshold
         
         st.markdown("---")
         st.markdown("## 📊 Analysis Results")
         
-        # Summary statistics
+        # Summary statistics (recalculated with current threshold)
         total_images = len(results)
         anomaly_count = sum(1 for r in results if r['is_anomaly'])
         normal_count = total_images - anomaly_count
@@ -509,7 +527,7 @@ def main():
             with met_col1:
                 st.metric("Reconstruction Error", f"{result['error_score']:.6f}")
             with met_col2:
-                st.metric("Threshold", f"{threshold:.6f}")
+                st.metric("Threshold", f"{current_threshold:.6f}")
             with met_col3:
                 st.metric("Confidence", confidence)
             
@@ -549,8 +567,8 @@ def main():
                     textposition='auto',
                 ))
                 
-                fig.add_hline(y=threshold, line_dash="dash", line_color="orange",
-                             annotation_text=f"Threshold: {threshold:.6f}")
+                fig.add_hline(y=current_threshold, line_dash="dash", line_color="orange",
+                             annotation_text=f"Threshold: {current_threshold:.6f}")
                 
                 fig.update_layout(
                     title="Score Comparison",
