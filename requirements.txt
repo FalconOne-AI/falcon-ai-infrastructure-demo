@@ -1,8 +1,6 @@
-streamlit
-torch
-torchvision
-Pillow
-numpy
-matplotlib
-gdown
-scipy
+streamlit==1.31.0
+torch==2.1.0
+torchvision==0.16.0
+Pillow==10.2.0
+numpy==1.24.3
+plotly==5.18.0
