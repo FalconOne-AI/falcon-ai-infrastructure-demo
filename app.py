@@ -405,8 +405,17 @@ def main():
     # Main content area
     st.markdown("### 📤 Upload Images")
     
-    # Clear All button
-    if 'results' in st.session_state or uploaded_files:
+    # Batch upload with size limit
+    st.caption("💡 Upload multiple images (up to 200MB total)")
+    uploaded_files = st.file_uploader(
+        "Choose concrete images",
+        type=['png', 'jpg', 'jpeg'],
+        accept_multiple_files=True,
+        help="Upload multiple images for batch analysis. Maximum total size: 200MB"
+    )
+    
+    # Clear All button (appears after files are uploaded or results exist)
+    if 'results' in st.session_state or (uploaded_files and len(uploaded_files) > 0):
         if st.button("🗑️ Clear All", type="secondary", help="Remove all uploaded files and clear analysis"):
             # Clear session state
             if 'results' in st.session_state:
@@ -419,15 +428,6 @@ def main():
                 del st.session_state['overlay_alpha']
             st.success("✅ Cleared all files and analysis!")
             st.rerun()
-    
-    # Batch upload with size limit
-    st.caption("💡 Upload multiple images (up to 200MB total)")
-    uploaded_files = st.file_uploader(
-        "Choose concrete images",
-        type=['png', 'jpg', 'jpeg'],
-        accept_multiple_files=True,
-        help="Upload multiple images for batch analysis. Maximum total size: 200MB"
-    )
     
     # Check total file size
     if uploaded_files:
