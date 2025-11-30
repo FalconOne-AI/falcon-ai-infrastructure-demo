@@ -236,9 +236,14 @@ def tensor_to_image(tensor):
     return Image.fromarray(img_array)
 
 def create_heatmap(error_map, colormap='hot'):
-    """Create heatmap visualization of reconstruction error"""
-    # Normalize error map
-    error_norm = (error_map - error_map.min()) / (error_map.max() - error_map.min() + 1e-8)
+    """Create heatmap visualization of reconstruction error with enhanced contrast"""
+    # Apply contrast enhancement - use percentile normalization for better visibility
+    p5 = np.percentile(error_map, 5)
+    p95 = np.percentile(error_map, 95)
+    
+    # Clip and normalize for better contrast
+    error_clipped = np.clip(error_map, p5, p95)
+    error_norm = (error_clipped - p5) / (p95 - p5 + 1e-8)
     
     # Apply colormap
     cmap = cm.get_cmap(colormap)
@@ -248,12 +253,15 @@ def create_heatmap(error_map, colormap='hot'):
     return Image.fromarray(heatmap_rgb)
 
 def create_overlay(original_image, error_map, alpha=0.5, colormap='hot'):
-    """Create overlay of heatmap on original image"""
+    """Create overlay of heatmap on original image with enhanced defect visibility"""
     # Resize original to match error map size
     orig_array = np.array(original_image.resize((error_map.shape[1], error_map.shape[0])))
     
-    # Normalize error map
-    error_norm = (error_map - error_map.min()) / (error_map.max() - error_map.min() + 1e-8)
+    # Apply percentile normalization for better contrast
+    p5 = np.percentile(error_map, 5)
+    p95 = np.percentile(error_map, 95)
+    error_clipped = np.clip(error_map, p5, p95)
+    error_norm = (error_clipped - p5) / (p95 - p5 + 1e-8)
     
     # Create heatmap
     cmap = cm.get_cmap(colormap)
@@ -405,13 +413,18 @@ def main():
     # Main content area
     st.markdown("### 📤 Upload Images")
     
-    # Batch upload with size limit
+    # Initialize uploader key in session state
+    if 'uploader_key' not in st.session_state:
+        st.session_state['uploader_key'] = 0
+    
+    # Batch upload with size limit and dynamic key for clearing
     st.caption("💡 Upload multiple images (up to 200MB total)")
     uploaded_files = st.file_uploader(
         "Choose concrete images",
         type=['png', 'jpg', 'jpeg'],
         accept_multiple_files=True,
-        help="Upload multiple images for batch analysis. Maximum total size: 200MB"
+        help="Upload multiple images for batch analysis. Maximum total size: 200MB",
+        key=f"uploader_{st.session_state['uploader_key']}"
     )
     
     # Clear All button (appears after files are uploaded or results exist)
@@ -426,6 +439,10 @@ def main():
                 del st.session_state['heatmap_colormap']
             if 'overlay_alpha' in st.session_state:
                 del st.session_state['overlay_alpha']
+            
+            # Increment uploader key to reset file uploader
+            st.session_state['uploader_key'] += 1
+            
             st.success("✅ Cleared all files and analysis!")
             # Use rerun with compatibility for older Streamlit versions
             try:
@@ -488,8 +505,19 @@ def main():
         
         # Update threshold in real-time - recalculate anomaly status
         current_threshold = threshold
+        current_colormap = heatmap_colormap
+        current_alpha = overlay_alpha
+        
+        # Regenerate heatmaps and overlays if settings changed
         for result in results:
             result['is_anomaly'] = result['error_score'] > current_threshold
+            
+            # Regenerate heatmap with current colormap
+            result['heatmap'] = create_heatmap(result['pixel_error'], current_colormap)
+            
+            # Regenerate overlay with current settings
+            result['overlay'] = create_overlay(result['original'], result['pixel_error'], 
+                                               current_alpha, current_colormap)
         
         st.markdown("---")
         st.markdown("## 📊 Analysis Results")
